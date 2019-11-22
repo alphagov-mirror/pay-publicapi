@@ -159,7 +159,7 @@ public class SearchRefundsServiceTest {
     @Test
     @PactVerification({"ledger"})
     @Pacts(pacts = {"publicapi-ledger-search-refunds"})
-    public void getAllRefundsShouldReturnCorrectFromAndToDateFromLedger() {
+    public void getAllRefundsShouldReturnFromLedger() {
         RefundsParams params = new RefundsParams("2018-09-21T13:22:55Z", "2018-10-23T13:24:55Z", "1", "500");
         String accountId = "777";
         String refundId1 = "111111";
@@ -189,6 +189,33 @@ public class SearchRefundsServiceTest {
 
         assertThat(results.getLinks().getSelf().getHref(), is("http://publicapi.test.localhost/v1/refunds?from_date=2018-09-21T13%3A22%3A55Z&to_date=2018-10-23T13%3A24%3A55Z&display_size=500&page=1"));
     }
+
+    @Test
+    @PactVerification({"ledger"})
+    @Pacts(pacts = {"publicapi-ledger-search-refunds-with-from-and-to-date"})
+    public void getAllRefundsShouldReturnCorrectFromAndToDateFromLedger() {
+        RefundsParams params = new RefundsParams("2018-09-21T13:22:55Z", "2018-10-23T13:24:55Z", "1", "500");
+        String accountId = "777";
+        String refundId1 = "111111";
+        String extChargeId = "someExternalId1";
+        Account account = new Account(accountId, TokenPaymentType.CARD);
+        SearchRefundsResults results = searchRefundsService.searchLedgerRefunds(account, params);
+
+        assertThat(results.getResults().size(), is(2));
+        assertThat(results.getCount(), is(2));
+        assertThat(results.getTotal(), is(2));
+        assertThat(results.getPage(), is(1));
+        assertThat(results.getResults().get(0).getStatus(), is("success"));
+        assertThat(results.getResults().get(0).getCreatedDate(), is("2018-09-22T10:14:16.067Z"));
+        assertThat(results.getResults().get(0).getRefundId(), is(refundId1));
+        assertThat(results.getResults().get(0).getChargeId(), is(extChargeId));
+        assertThat(results.getResults().get(0).getAmount(), is(150L));
+        assertThat(results.getResults().get(0).getLinks().getSelf().getHref(), is(format("http://publicapi.test.localhost/v1/payments/%s/refunds/%s", extChargeId, refundId1)));
+        assertThat(results.getResults().get(0).getLinks().getPayment().getHref(), is(format("http://publicapi.test.localhost/v1/payments/%s", extChargeId)));
+
+        assertThat(results.getLinks().getSelf().getHref(), is("http://publicapi.test.localhost/v1/refunds?from_date=2018-09-21T13%3A22%3A55Z&to_date=2018-10-23T13%3A24%3A55Z&display_size=500&page=1"));
+    }
+
 
     @Test
     public void getSearchResponseFromLedger_shouldThrowRefundsValidationExceptionWhenParamsAreInvalid() {
