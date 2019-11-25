@@ -3,6 +3,7 @@ package uk.gov.pay.api.it;
 import com.google.gson.GsonBuilder;
 import io.restassured.response.Response;
 import io.restassured.response.ValidatableResponse;
+import org.junit.Before;
 import org.junit.Test;
 import uk.gov.pay.api.it.fixtures.PaymentRefundJsonFixture;
 import uk.gov.pay.api.model.Address;
@@ -50,12 +51,33 @@ public class PaymentRefundsResourceIT extends PaymentResourceITestBase {
     private PublicAuthMockClient publicAuthMockClient = new PublicAuthMockClient(publicAuthMock);
     private LedgerMockClient ledgerMockClient = new LedgerMockClient(ledgerMock);
 
-    @Test
-    public void getRefundById_shouldGetValidResponse() {
+    @Before
+    public void setUp() {
         publicAuthMockClient.mapBearerTokenToAccountId(API_KEY, GATEWAY_ACCOUNT_ID);
+    }
+
+    @Test
+    public void getRefundByIdThroughConnector_shouldGetValidResponse() {
         connectorMockClient.respondWithGetRefundById(GATEWAY_ACCOUNT_ID, CHARGE_ID, REFUND_ID, AMOUNT, REFUND_AMOUNT_AVAILABLE, "available", CREATED_DATE);
 
-        getPaymentRefundByIdResponse(API_KEY, CHARGE_ID, REFUND_ID)
+        assertSingleRefund(getPaymentRefundByIdResponse(CHARGE_ID, REFUND_ID));
+    }
+
+    @Test
+    public void getRefundByIdThroughLedger_shouldGetValidResponse() {
+        ledgerMockClient.respondWithRefund(REFUND_ID, aRefundTransactionFromLedgerFixture()
+                .withAmount((long) AMOUNT)
+                .withState(new TransactionState("available", false))
+                .withParentTransactionId(CHARGE_ID)
+                .withTransactionId(REFUND_ID)
+                .withCreatedDate(CREATED_DATE)
+                .build());
+
+        assertSingleRefund(getPaymentRefundByIdResponse(CHARGE_ID, REFUND_ID, "ledger-only"));
+    }
+
+    private void assertSingleRefund(ValidatableResponse paymentRefundByIdResponse) {
+        paymentRefundByIdResponse
                 .statusCode(200)
                 .contentType(JSON)
                 .body("refund_id", is(REFUND_ID))
@@ -70,38 +92,48 @@ public class PaymentRefundsResourceIT extends PaymentResourceITestBase {
     public void getRefundById_shouldGetNonAuthorized_whenPublicAuthRespondsUnauthorised() {
         publicAuthMockClient.respondUnauthorised();
 
-        getPaymentRefundByIdResponse(API_KEY, CHARGE_ID, REFUND_ID)
+        getPaymentRefundByIdResponse(CHARGE_ID, REFUND_ID)
                 .statusCode(401);
     }
 
     @Test
-    public void getRefundById_shouldReturnNotFound_whenRefundDoesNotExist() {
-        publicAuthMockClient.mapBearerTokenToAccountId(API_KEY, GATEWAY_ACCOUNT_ID);
+    public void getRefundByIdThroughConnector_shouldReturnNotFound_whenRefundDoesNotExist() {
         connectorMockClient.respondRefundNotFound(GATEWAY_ACCOUNT_ID, CHARGE_ID, "unknown-refund-id");
 
-        getPaymentRefundByIdResponse(API_KEY, CHARGE_ID, REFUND_ID)
-                .statusCode(404)
+        assertNotFoundResponse(getPaymentRefundByIdResponse(CHARGE_ID, REFUND_ID), 404, "P0700", "Not found");
+    }
+
+    @Test
+    public void getRefundByIdThroughLedger_shouldReturnNotFound_whenRefundDoesNotExist() {
+        ledgerMockClient.respondRefundNotFound("unknown-refund-id");
+
+        assertNotFoundResponse(getPaymentRefundByIdResponse(CHARGE_ID, REFUND_ID, "ledger-only"), 404, "P0700", "Not found");
+    }
+
+    private void assertNotFoundResponse(ValidatableResponse paymentRefundByIdResponse, int statusCode, String errorCode, String errorMessage) {
+        paymentRefundByIdResponse
+                .statusCode(statusCode)
                 .contentType(JSON)
-                .body("code", is("P0700"))
-                .body("description", is("Not found"));
+                .body("code", is(errorCode))
+                .body("description", is(errorMessage));
     }
 
     @Test
     public void getRefundById_returns500_whenConnectorRespondsWithResponseOtherThan200Or404() {
-        publicAuthMockClient.mapBearerTokenToAccountId(API_KEY, GATEWAY_ACCOUNT_ID);
         connectorMockClient.respondRefundWithError(GATEWAY_ACCOUNT_ID, CHARGE_ID, REFUND_ID);
 
-        getPaymentRefundByIdResponse(API_KEY, CHARGE_ID, REFUND_ID)
-                .statusCode(500)
-                .contentType(JSON)
-                .body("code", is("P0798"))
-                .body("description", is("Downstream system error"));
+        assertNotFoundResponse(getPaymentRefundByIdResponse(CHARGE_ID, REFUND_ID), 500, "P0798", "Downstream system error");
+    }
+
+    @Test
+    public void getRefundById_returns500_whenLedgerRespondsWithResponseOtherThan200Or404() {
+        ledgerMockClient.respondRefundWithError(REFUND_ID);
+
+        assertNotFoundResponse(getPaymentRefundByIdResponse(CHARGE_ID, REFUND_ID, "ledger-only"), 500, "P0798", "Downstream system error");
     }
 
     @Test
     public void getRefunds_shouldGetValidResponse() {
-        publicAuthMockClient.mapBearerTokenToAccountId(API_KEY, GATEWAY_ACCOUNT_ID);
-
         PaymentRefundJsonFixture refund_1 = new PaymentRefundJsonFixture(100L, CREATED_DATE, "100", "available", new ArrayList<>());
         PaymentRefundJsonFixture refund_2 = new PaymentRefundJsonFixture(300L, CREATED_DATE, "300", "pending", new ArrayList<>());
 
@@ -132,7 +164,6 @@ public class PaymentRefundsResourceIT extends PaymentResourceITestBase {
 
     @Test
     public void getPaymentRefundsFromLedger_shouldGetValidResponse() {
-        publicAuthMockClient.mapBearerTokenToAccountId(API_KEY, GATEWAY_ACCOUNT_ID);
         String refundTransactionId = "refund-transaction-1";
         RefundTransactionFromLedgerFixture refund1 = aRefundTransactionFromLedgerFixture()
                 .withAmount(1000L)
@@ -161,7 +192,6 @@ public class PaymentRefundsResourceIT extends PaymentResourceITestBase {
 
     @Test
     public void getRefunds_shouldGetValidResponse_whenListReturnedIsEmpty() {
-        publicAuthMockClient.mapBearerTokenToAccountId(API_KEY, GATEWAY_ACCOUNT_ID);
         connectorMockClient.respondWithGetAllRefunds(GATEWAY_ACCOUNT_ID, CHARGE_ID);
 
         getPaymentRefundsResponse(API_KEY, CHARGE_ID)
@@ -204,13 +234,12 @@ public class PaymentRefundsResourceIT extends PaymentResourceITestBase {
 
         postRefundRequest(payload);
     }
-    
+
     @Test
     public void createRefundWhenChargeNotFound_shouldReturn404() {
         String payload = new GsonBuilder().create().toJson(Map.of("amount", AMOUNT));
 
         connectorMockClient.respondChargeNotFound(CHARGE_ID, GATEWAY_ACCOUNT_ID, "Not found");
-        publicAuthMockClient.mapBearerTokenToAccountId(API_KEY, GATEWAY_ACCOUNT_ID);
 
         postRefunds(payload)
                 .then()
@@ -221,7 +250,6 @@ public class PaymentRefundsResourceIT extends PaymentResourceITestBase {
     public void createRefundWhenRefundAmountAvailableMismatch_shouldReturn412Response() {
         String payload = new GsonBuilder().create().toJson(
                 Map.of("amount", AMOUNT, "refund_amount_available", REFUND_AMOUNT_AVAILABLE));
-        publicAuthMockClient.mapBearerTokenToAccountId(API_KEY, GATEWAY_ACCOUNT_ID);
         String errorMessage = new GsonBuilder().create().toJson(
                 Map.of("code", "P0604", "description", "Refund amount available mismatch."));
         connectorMockClient.respondPreconditionFailed_whenCreateRefund(GATEWAY_ACCOUNT_ID, errorMessage, CHARGE_ID);
@@ -244,7 +272,6 @@ public class PaymentRefundsResourceIT extends PaymentResourceITestBase {
     }
 
     private void postRefundRequest(String payload) {
-        publicAuthMockClient.mapBearerTokenToAccountId(API_KEY, GATEWAY_ACCOUNT_ID);
         String refundStatus = "available";
         connectorMockClient.respondAccepted_whenCreateARefund(AMOUNT, REFUND_AMOUNT_AVAILABLE, GATEWAY_ACCOUNT_ID, CHARGE_ID, REFUND_ID, refundStatus, CREATED_DATE);
 
@@ -268,9 +295,15 @@ public class PaymentRefundsResourceIT extends PaymentResourceITestBase {
                 .post(format("/v1/payments/%s/refunds", CHARGE_ID));
     }
 
-    private ValidatableResponse getPaymentRefundByIdResponse(String bearerToken, String paymentId, String refundId) {
+    private ValidatableResponse getPaymentRefundByIdResponse(String paymentId, String refundId) {
+        String defaultConnectorStrategy = "";
+        return getPaymentRefundByIdResponse(paymentId, refundId, defaultConnectorStrategy);
+    }
+
+    private ValidatableResponse getPaymentRefundByIdResponse(String paymentId, String refundId, String strategy) {
         return given().port(app.getLocalPort())
-                .header(AUTHORIZATION, "Bearer " + bearerToken)
+                .header("X-Ledger", strategy)
+                .header(AUTHORIZATION, "Bearer " + PaymentResourceITestBase.API_KEY)
                 .get(format("/v1/payments/%s/refunds/%s", paymentId, refundId))
                 .then();
     }
