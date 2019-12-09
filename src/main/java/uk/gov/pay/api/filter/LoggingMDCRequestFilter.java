@@ -11,15 +11,25 @@ import javax.ws.rs.ext.Provider;
 import java.security.Principal;
 import java.util.Optional;
 
-import static uk.gov.pay.logging.LoggingKeys.GATEWAY_ACCOUNT_ID;
+import static uk.gov.pay.logging.LoggingKeys.*;
 
 @Provider
 @Priority(Priorities.USER)
-public class GatewayAccountIdFilter implements ContainerRequestFilter {
+public class LoggingMDCRequestFilter implements ContainerRequestFilter {
 
     @Override
     public void filter(ContainerRequestContext requestContext) {
         MDC.put(GATEWAY_ACCOUNT_ID, getAccountId(requestContext));
+        getPathParameterFromRequest("paymentId", requestContext)
+                .ifPresent(paymentId -> MDC.put(PAYMENT_EXTERNAL_ID, paymentId));
+        getPathParameterFromRequest("mandateId", requestContext)
+                .ifPresent(mandateId -> MDC.put(MANDATE_EXTERNAL_ID, mandateId));
+        getPathParameterFromRequest("refundId", requestContext)
+                .ifPresent(refundId -> MDC.put(REFUND_EXTERNAL_ID, refundId));
+    }
+
+    private Optional<String> getPathParameterFromRequest(String parameterName, ContainerRequestContext requestContext) {
+        return Optional.ofNullable(requestContext.getUriInfo().getPathParameters().getFirst(parameterName));
     }
 
     private String getAccountId(ContainerRequestContext requestContext) {
