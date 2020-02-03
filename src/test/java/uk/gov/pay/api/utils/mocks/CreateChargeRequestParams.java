@@ -22,6 +22,7 @@ public class CreateChargeRequestParams {
     private final String addressCountry;
     private final SupportedLanguage language;
     private final Source source;
+    private final boolean moto;
 
     private CreateChargeRequestParams(CreateChargeRequestParamsBuilder builder) {
         this.amount = builder.amount;
@@ -38,6 +39,11 @@ public class CreateChargeRequestParams {
         this.addressCountry = builder.addressCountry;
         this.language = builder.language;
         this.source = builder.source;
+        this.moto = builder.moto;
+    }
+
+    public boolean isMoto() {
+        return moto;
     }
 
     public int getAmount() {
@@ -111,6 +117,7 @@ public class CreateChargeRequestParams {
         private String addressCountry;
         private SupportedLanguage language;
         private Source source;
+        private boolean moto;
 
         private CreateChargeRequestParamsBuilder() {
         }
@@ -191,6 +198,11 @@ public class CreateChargeRequestParams {
 
         public CreateChargeRequestParamsBuilder withSource(Source source) {
             this.source = source;
+            return this;
+        }
+
+        public CreateChargeRequestParamsBuilder withMoto(boolean moto) {
+            this.moto = moto;
             return this;
         }
     }
