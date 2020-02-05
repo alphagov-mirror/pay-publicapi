@@ -22,7 +22,7 @@
         "path": "/v1/transaction",
         "query": {
           "state": [
-            "success"
+            "SUCCESS"
           ],
           "status_version" : [
             "1"
