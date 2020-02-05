@@ -145,6 +145,7 @@ public class CardPaymentSearchServiceTest {
         Account account = new Account("123456", TokenPaymentType.CARD);
         var searchParams = new PaymentSearchParams.Builder()
                 .withCardHolderName("j.doe@example.org")
+                .withState("success")
                 .build();
 
         Response response = paymentSearchService.searchLedgerPayments(account, searchParams);
